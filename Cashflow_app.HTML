@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>CashFlow Magazin — Local</title>
+<style>
+  :root{--bg:#f6f7fb;--card:#ffffff;--muted:#6b7280;--text:#0f172a;--primary:#0b66ff;--danger:#ef4444;--ok:#16a34a}
+  *{box-sizing:border-box}
+  body{font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial; background:var(--bg); margin:0; color:var(--text)}
+  .container{max-width:1200px;margin:18px auto;padding:18px}
+  header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+  h1{font-size:20px;margin:0}
+  .card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(15,23,42,.06)}
+  .grid{display:grid;gap:12px}
+  .grid-2{grid-template-columns:1.2fr .8fr}
+  .grid-3{grid-template-columns:1fr 1fr 1fr}
+  .muted{color:var(--muted);font-size:13px}
+  label{display:block;font-size:13px;margin-top:8px;color:var(--muted)}
+  input,select,textarea{width:100%;padding:8px;border-radius:10px;border:1px solid #e6e9ef;margin-top:6px}
+  button{background:var(--primary);color:#fff;border:0;padding:9px 12px;border-radius:10px;cursor:pointer}
+  .btn-ghost{background:transparent;color:var(--primary);border:1px solid #cfe0ff}
+  .btn-danger{background:var(--danger)}
+  .btn-ok{background:var(--ok)}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px;border-bottom:1px solid #eef1f5;text-align:left;font-size:13px}
+  .balance{font-weight:800;font-size:28px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #e5e7eb}
+  .in{color:#15803d}.out{color:#b91c1c}
+  nav.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  nav.tabs button{background:#fff;color:var(--text);border:1px solid #e6e9ef}
+  nav.tabs button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+  @media(max-width:980px){.grid-2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container" id="app">
+  <header class="card">
+    <div>
+      <h1>CashFlow Magazin — Local</h1>
+      <div class="muted">Monitorizare numerar casă • multi-user • stocare locală</div>
+    </div>
+    <div class="muted" id="userArea"></div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="tab-dashboard" class="active">Tranzacții</button>
+    <button data-tab="tab-stats">Statistici</button>
+    <button data-tab="tab-settings">Setări</button>
+  </nav>
+
+  <!-- LOGIN -->
+  <div id="login" class="card" style="max-width:460px;margin:24px auto;display:none">
+    <h2>Autentificare</h2>
+    <div class="muted">Utilizatori demo existenți: admin, cashier1, cashier2, manager (parole: 1234)</div>
+    <label>Utilizator</label>
+    <input id="login_user" placeholder="ex: admin" />
+    <label>Parolă</label>
+    <input id="login_pass" type="password" placeholder="1234" />
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button id="btnLogin">Conectare</button>
+      <button id="btnDemo" class="btn-ghost">Demo (admin)</button>
+    </div>
+    <div id="login_msg" class="muted" style="margin-top:10px"></div>
+  </div>
+
+  <!-- APP CONTENT -->
+  <div id="content" style="display:none">
+    <!-- DASHBOARD -->
+    <section id="tab-dashboard">
+      <div class="grid grid-2">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <div>
+              <div class="muted">Sold curent (<span id="currencyLabel"></span>)</div>
+              <div class="balance" id="balanceValue">0.00</div>
+              <div class="muted">Ultima tranzacție: <span id="lastTx">—</span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="btnExportJSON" class="btn-ghost">Export JSON</button>
+              <button id="btnExportCSV" class="btn-ghost">Export CSV</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Setare sold actual</h3>
+          <div class="muted">Ajustează manual soldul curent dacă există diferențe de casă.</div>
+          <label>Sold nou</label><input id="openingInput" type="number" step="0.01" />
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button id="btnSetOpening" class="btn-ok">Setează sold</button>
+            <button id="btnAddOpenAdj" class="btn-ghost">Înregistrează ajustare</button>
+          </div>
+          <div class="muted" style="margin-top:6px">„Setează sold” îl rescrie direct. „Înregistrează ajustare” adaugă o tranzacție +/− cu motiv „ajustare casă”.</div>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top:12px">
+        <div class="card">
+          <h3>Adaugă tranzacție</h3>
+          <label>Tip</label>
+          <select id="tx_type"><option value="in">Intrare</option><option value="out">Ieșire</option></select>
+          <label>Sumă</label><input id="tx_amount" type="number" step="0.01" />
+          <label>Categorie</label>
+          <select id="tx_category"></select>
+          <label>Metodă</label><input id="tx_method" placeholder="cash" value="cash" />
+          <label>Motiv / Observații</label><input id="tx_reason" placeholder="ex: vânzare, plată furnizor" />
+          <label>Data (opțional)</label><input id="tx_date" type="datetime-local" />
+          <div style="margin-top:10px;display:flex;gap:8px">
+            <button id="btnAddTx">Adaugă</button>
+            <button id="btnClearForm" class="btn-ghost">Curăță</button>
+          </div>
+          <div id="tx_msg" class="muted" style="margin-top:6px"></div>
+        </div>
+
+        <div class="card">
+          <h3>Filtre & Backup</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <select id="f_user"><option value="">Toți utilizatorii</option></select>
+            <select id="f_type"><option value="">Tip: toate</option><option value="in">Intrări</option><option value="out">Ieșiri</option></select>
+            <input id="f_from" type="date" />
+            <input id="f_to" type="date" />
+            <select id="f_category"><option value="">Toate categoriile</option></select>
+            <button id="btnFilter" class="btn-ghost">Aplică</button>
+            <button id="btnResetFilter" class="btn-ghost">Reset</button>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+            <button id="btnExportFiltered" class="btn-ghost">Export CSV filtrat</button>
+            <label class="pill">Import JSON <input id="importFile" type="file" accept="application/json" style="display:none"></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>Istoric tranzacții</h3>
+        <div class="muted">Ultimele 500 (folosește export pentru tot istoricul)</div>
+        <table id="txTable" style="margin-top:8px">
+          <thead><tr><th>Data</th><th>Tip</th><th>Sumă</th><th>Monedă</th><th>Categorie</th><th>Metodă</th><th>Motiv</th><th>User</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- STATS -->
+    <section id="tab-stats" style="display:none">
+      <div class="grid grid-3">
+        <div class="card"><div class="muted">Total Intrări</div><div class="balance in" id="statIn">0</div></div>
+        <div class="card"><div class="muted">Total Ieșiri</div><div class="balance out" id="statOut">0</div></div>
+        <div class="card"><div class="muted">Net</div><div class="balance" id="statNet">0</div></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>Interval statistici</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-ghost" data-range="today">Astăzi</button>
+          <button class="btn-ghost" data-range="7d">Ultimele 7 zile</button>
+          <button class="btn-ghost" data-range="month">Luna curentă</button>
+          <button class="btn-ghost" data-range="all">Tot</button>
+          <input id="s_from" type="date">
+          <input id="s_to" type="date">
+          <button id="btnStatsCustom" class="btn-ghost">Aplică interval</button>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top:12px">
+        <div class="card">
+          <h3>Top categorii — Intrări</h3>
+          <table id="catIn"><thead><tr><th>Categorie</th><th>Suma</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div class="card">
+          <h3>Top categorii — Ieșiri</h3>
+          <table id="catOut"><thead><tr><th>Categorie</th><th>Suma</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>Breakdown lunar</h3>
+        <table id="monthly"><thead><tr><th>Lună</th><th>Intrări</th><th>Ieșiri</th><th>Net</th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="tab-settings" style="display:none">
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>Setări Aplicație</h3>
+          <label>Monedă</label><input id="set_currency" placeholder="RON" />
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button id="saveSettings">Salvează</button>
+            <button id="resetDemo" class="btn-ghost">Reset demo</button>
+            <button id="clearAll" class="btn-danger">Șterge tot</button>
+          </div>
+          <div class="muted" style="margin-top:8px">Datele sunt salvate în localStorage pe acest dispozitiv.</div>
+        </div>
+
+        <div class="card">
+          <h3>Utilizatori</h3>
+          <div id="usersList" style="display:flex;flex-direction:column;gap:8px"></div>
+          <hr style="margin:12px 0">
+          <h4>Adaugă utilizator</h4>
+          <label>Username</label><input id="u_new_user">
+          <label>Nume afișat</label><input id="u_new_display">
+          <label>Parolă</label><input id="u_new_pass" type="password">
+          <label>Rol</label><select id="u_new_role"><option>cashier</option><option>manager</option><option>admin</option></select>
+          <div style="margin-top:8px"><button id="u_add" class="btn-ok">Adaugă</button></div>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top:12px">
+        <div class="card">
+          <h3>Categorii Intrări</h3>
+          <div id="cats_in"></div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input id="cat_in_new" placeholder="ex: Vânzări, Depunere">
+            <button id="cat_in_add" class="btn-ok">Adaugă</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Categorii Ieșiri</h3>
+          <div id="cats_out"></div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input id="cat_out_new" placeholder="ex: Furnizori, Cheltuieli">
+            <button id="cat_out_add" class="btn-ok">Adaugă</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>Backup / Restore</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="btnExportJSON2" class="btn-ghost">Export JSON</button>
+          <button id="btnExportCSV2" class="btn-ghost">Export CSV</button>
+          <label class="pill">Import JSON <input id="importFile2" type="file" accept="application/json" style="display:none"></label>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="muted" style="text-align:center;margin-top:16px">
+    Acces de pe telefon: rulează un server static în folder (ex: <code>python -m http.server 8000</code>) și accesează IP-ul local al PC-ului.
+  </footer>
+</div>
+
+<script>
+/* ==== Data & State ==== */
+const STORAGE_KEY = 'cashflow_data_v2';
+function defaultData(){
+  return {
+    users:[
+      {username:'admin', display:'Admin', password:'1234', role:'admin'},
+      {username:'cashier1', display:'Cashier 1', password:'1234', role:'cashier'},
+      {username:'cashier2', display:'Cashier 2', password:'1234', role:'cashier'},
+      {username:'manager', display:'Manager', password:'1234', role:'manager'},
+    ],
+    settings:{currency:'RON'},
+    categories:{in:['Vânzări','Depunere','Altele'], out:['Furnizori','Cheltuieli','Retragere']},
+    balance:0,
+    transactions:[] // {id,date,type,amount,method,reason,category,user}
+  };
+}
+function loadData(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw){ const d=defaultData(); localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); return d; }
+  try{ return JSON.parse(raw); }catch(e){ const d=defaultData(); localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); return d; }
+}
+function saveData(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data)); }
+
+let state = { data: loadData(), user:null, filter:{}, tab:'tab-dashboard', statsRange:'all' };
+
+/* ==== Auth ==== */
+function login(u,p){
+  const found = state.data.users.find(x=>x.username===u && x.password===p);
+  if(found){ state.user = found; render(); return true; }
+  return false;
+}
+function logout(){ state.user=null; render(); }
+
+/* ==== Transactions ==== */
+function round(v){ return Math.round((v+Number.EPSILON)*100)/100; }
+function addTransaction(obj){
+  const tx = {
+    id: 'tx_'+Date.now(),
+    date: obj.date || new Date().toISOString(),
+    type: obj.type, // in/out
+    amount: round(parseFloat(obj.amount)),
+    method: obj.method || 'cash',
+    reason: obj.reason || '',
+    category: obj.category || '',
+    user: state.user?.username || 'unknown'
+  };
+  if(!(tx.amount>0)) return false;
+  state.data.transactions.unshift(tx);
+  // update balance
+  if(tx.type==='in') state.data.balance = round(state.data.balance + tx.amount);
+  else state.data.balance = round(state.data.balance - tx.amount);
+  saveData(); return true;
+}
+
+/* ==== Export / Import ==== */
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(state.data,null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download='cashflow_backup.json'; a.click(); URL.revokeObjectURL(url);
+}
+function exportCSV(list){
+  const rows=[['id','date','type','amount','currency','category','method','reason','user','balance_after']];
+  let bal=0;
+  // reconstruct balance in ascending time
+  const asc=[...list].reverse();
+  asc.forEach(tx=>{ bal += (tx.type==='in'?tx.amount:-tx.amount); rows.push([tx.id,tx.date,tx.type,tx.amount,state.data.settings.currency,tx.category,tx.method,tx.reason,tx.user,round(bal)]); });
+  const csv = rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download='cashflow_transactions.csv'; a.click(); URL.revokeObjectURL(url);
+}
+function importJSONFile(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const parsed=JSON.parse(e.target.result);
+      if(!parsed.transactions||!parsed.users||!parsed.settings) throw new Error('Structură invalidă.');
+      if(confirm('Importă și suprascrie datele curente? Recomand backup înainte.')){
+        state.data=parsed; saveData(); alert('Import realizat. Reîncarcă sau continuă.'); render();
+      }
+    }catch(err){ alert('Eroare import: '+err.message); }
+  };
+  reader.readAsText(file);
+}
+
+/* ==== Utils ==== */
+function $(sel,root=document){ return root.querySelector(sel); }
+function $all(sel,root=document){ return Array.from(root.querySelectorAll(sel)); }
+function fmt(n){ return (n||0).toFixed(2); }
+function esc(s){ return String(s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]); }
+
+/* ==== Rendering ==== */
+function render(){
+  // login vs content
+  $('#userArea').innerHTML = state.user ? `Conectat: <strong>${state.user.display}</strong> — <a href="#" onclick="logout();return false;">Deconectare</a>` : 'Neconectat';
+  $('#login').style.display = state.user ? 'none' : 'block';
+  $('#content').style.display = state.user ? 'block' : 'none';
+  if(!state.user) {
+    $('#login_msg').textContent='';
+    $('#btnLogin').onclick = ()=>{
+      const u=$('#login_user').value.trim(); const p=$('#login_pass').value;
+      if(!login(u,p)) $('#login_msg').textContent='Credentiale invalide.';
+    };
+    $('#btnDemo').onclick = ()=>{ login('admin','1234'); };
+    return;
+  }
+
+  // tabs
+  $all('nav.tabs button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tab===state.tab);
+    b.onclick=()=>{ state.tab=b.dataset.tab; renderTabs(); };
+  });
+  renderTabs();
+}
+
+function renderTabs(){
+  // show tab content
+  ['tab-dashboard','tab-stats','tab-settings'].forEach(id=>{
+    $('#'+id).style.display = (id===state.tab)?'block':'none';
+  });
+  // common small bits
+  $('#currencyLabel').textContent = state.data.settings.currency;
+
+  if(state.tab==='tab-dashboard'){
+    // dashboard header
+    $('#balanceValue').textContent = fmt(state.data.balance)+' '+state.data.settings.currency;
+    $('#lastTx').textContent = state.data.transactions.length ? new Date(state.data.transactions[0].date).toLocaleString() : '—';
+
+    // export buttons
+    $('#btnExportJSON').onclick=exportJSON; $('#btnExportCSV').onclick=()=>exportCSV(state.data.transactions);
+    $('#btnExportFiltered').onclick=()=>exportCSV(applyFilters());
+    // import
+    $('#importFile').onchange = e=>{ const f=e.target.files[0]; if(f) importJSONFile(f); };
+
+    // opening balance controls
+    $('#btnSetOpening').onclick=()=>{
+      const v=parseFloat($('#openingInput').value);
+      if(isNaN(v)) return alert('Introdu o valoare numerică.');
+      state.data.balance=round(v); saveData(); render();
+    };
+    $('#btnAddOpenAdj').onclick=()=>{
+      const v=parseFloat($('#openingInput').value);
+      if(isNaN(v)) return alert('Introdu o valoare numerică.');
+      const diff = round(v - state.data.balance);
+      if(diff===0) return alert('Soldul este deja egal cu valoarea introdusă.');
+      addTransaction({type: diff>0?'in':'out', amount: Math.abs(diff), method:'cash', reason:'ajustare casă', category:'Ajustare', date:new Date().toISOString()});
+      render();
+    };
+
+    // users filter options
+    const fUser=$('#f_user'); fUser.innerHTML='<option value="">Toți utilizatorii</option>'+state.data.users.map(u=>`<option value="${u.username}">${esc(u.display)} (${esc(u.username)})</option>`).join('');
+    // category filter options
+    const fCat=$('#f_category'); const allCats=[...state.data.categories.in, ...state.data.categories.out, 'Ajustare'];
+    fCat.innerHTML='<option value="">Toate categoriile</option>'+allCats.map(c=>`<option>${esc(c)}</option>`).join('');
+
+    // tx form categories based on type
+    function fillTxCats(){
+      const type = $('#tx_type').value;
+      const list = type==='in' ? state.data.categories.in : state.data.categories.out;
+      $('#tx_category').innerHTML = list.map(c=>`<option>${esc(c)}</option>`).join('');
+    }
+    fillTxCats();
+    $('#tx_type').onchange = fillTxCats;
+
+    // add tx
+    $('#btnAddTx').onclick=()=>{
+      const type=$('#tx_type').value;
+      const amount=parseFloat($('#tx_amount').value);
+      const category=$('#tx_category').value;
+      const method=($('#tx_method').value||'cash').trim();
+      const reason=$('#tx_reason').value.trim();
+      const date=$('#tx_date').value ? new Date($('#tx_date').value).toISOString() : new Date().toISOString();
+      if(!(amount>0)) return $('#tx_msg').textContent='Introdu o sumă > 0';
+      const ok = addTransaction({type,amount,method,reason,category,date});
+      $('#tx_msg').textContent = ok?'Tranzacție adăugată.':'Eroare la adăugare.';
+      $('#tx_amount').value=''; $('#tx_reason').value='';
+      renderList();
+      render();
+    };
+    $('#btnClearForm').onclick=()=>{ ['tx_amount','tx_reason','tx_method','tx_date'].forEach(id=>$('#'+id).value=''); };
+
+    // filters
+    $('#btnFilter').onclick=()=>{
+      state.filter = {
+        user: $('#f_user').value,
+        type: $('#f_type').value,
+        from: $('#f_from').value,
+        to: $('#f_to').value,
+        category: $('#f_category').value
+      };
+      renderList();
+    };
+    $('#btnResetFilter').onclick=()=>{ state.filter={}; $('#f_user').value=''; $('#f_type').value=''; $('#f_from').value=''; $('#f_to').value=''; $('#f_category').value=''; renderList(); };
+
+    renderList();
+  }
+
+  if(state.tab==='tab-stats'){
+    // quick range buttons
+    $all('#tab-stats button[data-range]').forEach(b=>{
+      b.onclick=()=>{ state.statsRange=b.dataset.range; renderStats(); };
+    });
+    $('#btnStatsCustom').onclick=()=>{ state.statsRange='custom'; renderStats(); };
+    renderStats();
+  }
+
+  if(state.tab==='tab-settings'){
+    // currency
+    $('#set_currency').value = state.data.settings.currency;
+    $('#saveSettings').onclick=()=>{ state.data.settings.currency=$('#set_currency').value||'RON'; saveData(); render(); };
+
+    // demo/reset
+    $('#resetDemo').onclick=()=>{ if(confirm('Resetezi la demo? (pierzi tranzacțiile curente)')){ state.data=defaultData(); saveData(); render(); } };
+    $('#clearAll').onclick=()=>{ if(confirm('Ștergi TOT? (ireversibil)')){ localStorage.removeItem(STORAGE_KEY); state.data=defaultData(); saveData(); render(); } };
+
+    // users list
+    const ul = $('#usersList'); ul.innerHTML='';
+    state.data.users.forEach((u,idx)=>{
+      const row=document.createElement('div');
+      row.style.display='grid'; row.style.gridTemplateColumns='1fr 1fr 1fr 1fr auto'; row.style.gap='8px';
+      row.innerHTML = `
+        <input value="${esc(u.username)}" disabled>
+        <input value="${esc(u.display)}" data-k="display">
+        <input type="password" value="${esc(u.password)}" data-k="password">
+        <select data-k="role">
+          <option ${u.role==='cashier'?'selected':''}>cashier</option>
+          <option ${u.role==='manager'?'selected':''}>manager</option>
+          <option ${u.role==='admin'?'selected':''}>admin</option>
+        </select>
+        <div style="display:flex;gap:6px;justify-content:flex-end">
+          <button class="btn-ghost" data-act="save">Salvează</button>
+          <button class="btn-danger" data-act="del">Șterge</button>
+        </div>`;
+      ul.appendChild(row);
+      row.querySelector('[data-act="save"]').onclick=()=>{
+        u.display = row.querySelector('[data-k="display"]').value;
+        u.password = row.querySelector('[data-k="password"]').value;
+        u.role = row.querySelector('[data-k="role"]').value;
+        saveData(); alert('Utilizator salvat.');
+      };
+      row.querySelector('[data-act="del"]').onclick=()=>{
+        if(u.username===state.user.username) return alert('Nu poți șterge utilizatorul conectat.');
+        if(confirm('Ștergi utilizatorul?')){ state.data.users.splice(idx,1); saveData(); render(); }
+      };
+    });
+    // add user
+    $('#u_add').onclick=()=>{
+      const un=$('#u_new_user').value.trim(), dn=$('#u_new_display').value.trim(), pw=$('#u_new_pass').value, rl=$('#u_new_role').value;
+      if(!un||!pw||!dn) return alert('Completează username, nume afișat și parolă.');
+      if(state.data.users.some(x=>x.username===un)) return alert('Username deja folosit.');
+      state.data.users.push({username:un, display:dn, password:pw, role:rl}); saveData(); $('#u_new_user').value=''; $('#u_new_display').value=''; $('#u_new_pass').value=''; render();
+    };
+
+    // categories
+    const paintCats = ()=>{
+      // IN
+      const ci=$('#cats_in'); ci.innerHTML='';
+      state.data.categories.in.forEach((c,i)=>{
+        const row=document.createElement('div'); row.style.display='flex'; row.style.gap='8px'; row.style.marginTop='6px';
+        row.innerHTML=`<input value="${esc(c)}"><button class="btn-ghost" data-a="save">Salvează</button><button class="btn-danger" data-a="del">Șterge</button>`;
+        ci.appendChild(row);
+        row.querySelector('[data-a="save"]').onclick=()=>{ state.data.categories.in[i]=row.querySelector('input').value||c; saveData(); paintCats(); refreshTxFormCats(); };
+        row.querySelector('[data-a="del"]').onclick=()=>{ state.data.categories.in.splice(i,1); saveData(); paintCats(); refreshTxFormCats(); };
+      });
+      // OUT
+      const co=$('#cats_out'); co.innerHTML='';
+      state.data.categories.out.forEach((c,i)=>{
+        const row=document.createElement('div'); row.style.display='flex'; row.style.gap='8px'; row.style.marginTop='6px';
+        row.innerHTML=`<input value="${esc(c)}"><button class="btn-ghost" data-a="save">Salvează</button><button class="btn-danger" data-a="del">Șterge</button>`;
+        co.appendChild(row);
+        row.querySelector('[data-a="save"]').onclick=()=>{ state.data.categories.out[i]=row.querySelector('input').value||c; saveData(); paintCats(); refreshTxFormCats(); };
+        row.querySelector('[data-a="del"]').onclick=()=>{ state.data.categories.out.splice(i,1); saveData(); paintCats(); refreshTxFormCats(); };
+      });
+    };
+    paintCats();
+    $('#cat_in_add').onclick=()=>{ const v=$('#cat_in_new').value.trim(); if(!v) return; state.data.categories.in.push(v); $('#cat_in_new').value=''; saveData(); renderTabs(); };
+    $('#cat_out_add').onclick=()=>{ const v=$('#cat_out_new').value.trim(); if(!v) return; state.data.categories.out.push(v); $('#cat_out_new').value=''; saveData(); renderTabs(); };
+
+    // backup
+    $('#btnExportJSON2').onclick=exportJSON; $('#btnExportCSV2').onclick=()=>exportCSV(state.data.transactions);
+    $('#importFile2').onchange = e=>{ const f=e.target.files[0]; if(f) importJSONFile(f); };
+  }
+}
+
+function refreshTxFormCats(){
+  if(state.tab!=='tab-dashboard') return;
+  const type = $('#tx_type').value;
+  const list = type==='in' ? state.data.categories.in : state.data.categories.out;
+  $('#tx_category').innerHTML = list.map(c=>`<option>${esc(c)}</option>`).join('');
+}
+
+function renderList(){
+  const list = applyFilters().slice(0,500);
+  const tbody = $('#txTable tbody'); tbody.innerHTML='';
+  list.forEach(tx=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${new Date(tx.date).toLocaleString()}</td>
+      <td>${tx.type==='in'?'<span class="in">Intrare</span>':'<span class="out">Ieșire</span>'}</td>
+      <td>${fmt(tx.amount)}</td>
+      <td>${esc(state.data.settings.currency)}</td>
+      <td>${esc(tx.category||'')}</td>
+      <td>${esc(tx.method||'')}</td>
+      <td>${esc(tx.reason||'')}</td>
+      <td>${esc(tx.user||'')}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ==== Filters ==== */
+function applyFilters(){
+  const f=state.filter||{};
+  let res=[...state.data.transactions];
+  if(f.user) res=res.filter(x=>x.user===f.user);
+  if(f.type) res=res.filter(x=>x.type===f.type);
+  if(f.category) res=res.filter(x=>x.category===f.category);
+  if(f.from) res=res.filter(x=> new Date(x.date)>=new Date(f.from+'T00:00:00'));
+  if(f.to) res=res.filter(x=> new Date(x.date)<=new Date(f.to+'T23:59:59'));
+  return res;
+}
+
+/* ==== Stats ==== */
+function rangeFilter(list){
+  const now=new Date();
+  let from=null,to=null;
+  if(state.statsRange==='today'){
+    from=new Date(now.toISOString().slice(0,10)+'T00:00:00'); to=new Date(now.toISOString().slice(0,10)+'T23:59:59');
+  }else if(state.statsRange==='7d'){
+    to=now; from=new Date(now); from.setDate(now.getDate()-6);
+    from=new Date(from.toISOString().slice(0,10)+'T00:00:00'); to=new Date(to.toISOString().slice(0,10)+'T23:59:59');
+  }else if(state.statsRange==='month'){
+    from=new Date(now.getFullYear(), now.getMonth(), 1);
+    to=new Date(now.getFullYear(), now.getMonth()+1, 0, 23,59,59);
+  }else if(state.statsRange==='custom'){
+    const sf=$('#s_from').value, st=$('#s_to').value;
+    if(sf) from=new Date(sf+'T00:00:00'); if(st) to=new Date(st+'T23:59:59');
+  }
+  if(!from && !to) return list;
+  return list.filter(tx=>{
+    const d=new Date(tx.date);
+    if(from && d<from) return false;
+    if(to && d>to) return false;
+    return true;
+  });
+}
+
+function renderStats(){
+  const all = rangeFilter(state.data.transactions);
+  const totalIn = all.filter(t=>t.type==='in').reduce((s,t)=>s+t.amount,0);
+  const totalOut = all.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0);
+  $('#statIn').textContent = fmt(totalIn)+' '+state.data.settings.currency;
+  $('#statOut').textContent = fmt(totalOut)+' '+state.data.settings.currency;
+  $('#statNet').textContent = fmt(totalIn-totalOut)+' '+state.data.settings.currency;
+
+  // categories
+  const acc = (map, key, val)=>{ map[key]=(map[key]||0)+val; };
+  const byCatIn={}, byCatOut={};
+  all.forEach(t=>{ if(t.type==='in') acc(byCatIn, t.category||'—', t.amount); else acc(byCatOut, t.category||'—', t.amount); });
+  const tbodyIn=$('#catIn tbody'); const tbodyOut=$('#catOut tbody'); tbodyIn.innerHTML=''; tbodyOut.innerHTML='';
+  Object.entries(byCatIn).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
+    const tr=document.createElement('tr'); tr.innerHTML=`<td>${esc(k)}</td><td>${fmt(v)}</td>`; tbodyIn.appendChild(tr);
+  });
+  Object.entries(byCatOut).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
+    const tr=document.createElement('tr'); tr.innerHTML=`<td>${esc(k)}</td><td>${fmt(v)}</td>`; tbodyOut.appendChild(tr);
+  });
+
+  // monthly breakdown (YYYY-MM)
+  const byMonth={};
+  state.data.transactions.forEach(t=>{
+    const d=new Date(t.date); const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    byMonth[key] = byMonth[key] || {in:0,out:0};
+    if(t.type==='in') byMonth[key].in += t.amount; else byMonth[key].out += t.amount;
+  });
+  const tb=$('#monthly tbody'); tb.innerHTML='';
+  Object.keys(byMonth).sort().forEach(m=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${m}</td><td>${fmt(byMonth[m].in)}</td><td>${fmt(byMonth[m].out)}</td><td>${fmt(byMonth[m].in - byMonth[m].out)}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* ==== Init ==== */
+function init(){
+  // default show login if no user
+  render();
+
+  // header export mirrors
+  $('#btnExportJSON2')?.addEventListener('click', exportJSON);
+  $('#btnExportCSV2')?.addEventListener('click', ()=>exportCSV(state.data.transactions));
+
+  // import mirrors
+  $('#importFile2')?.addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importJSONFile(f); });
+  $('#importFile')?.addEventListener('change', e=>{ const f=e.target.files[0]; if(f) importJSONFile(f); });
+
+  // tab buttons (also work before login render switches)
+  $all('nav.tabs button').forEach(b=>{
+    b.onclick=()=>{ if(!state.user) return; state.tab=b.dataset.tab; render(); };
+  });
+}
+init();
+</script>
+</body>
+</html>
